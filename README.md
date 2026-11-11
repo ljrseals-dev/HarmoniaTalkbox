@@ -10,8 +10,8 @@ Clean modular architecture designed for AURA-G integration and browser / real-ti
 ## Quick start
 
 ```bash
-# Requirements: Python 3.10+, numpy, scipy
-pip install numpy scipy
+# Requirements: Python 3.9+, numpy, scipy
+pip install -e .
 
 # Run the physical verification + generate demo audio
 python mouth_guitar_talkbox.py
@@ -30,6 +30,8 @@ test_transcription_f1 .................. ok   (F1 ≈ 0.95)
 
 `mouth_guitar_talkbox.py` writes `mouth_guitar_demo.wav` (guitar arpeggio gliding ah→eh→ee→oh→oo through the tract).
 
+Open `mouth_model_ui.html` in a browser for an interactive Web Audio approximation (Karplus-Strong + cascaded formant filters).
+
 ---
 
 ## Architecture
@@ -41,7 +43,8 @@ test_transcription_f1 .................. ok   (F1 ≈ 0.95)
 | `mouth_tract.py` | **48-section Kelly-Lochbaum waveguide** (corrected junctions, glottal/lip reflections, area functions fitted to Peterson-Barney formants) |
 | `mouth_guitar_talkbox.py` | Verification suite + demo renderer |
 | `test_midi_bridge.py` | 4-test unit suite (MIDI round-trip, transcription F1, plugin hook, end-to-end determinism) |
-| `mouth_model_ui.html` | Browser UI for the MouthModel (50 presets, tract viz, formant estimates) |
+| `mouth_model_ui.html` | Browser UI (Web Audio Karplus-Strong + formant filters) |
+| `examples/aura_integration.py` | How to plug a custom neural transcriber (AURA-G) into the pipeline |
 
 ### Key interface
 ```python
@@ -85,18 +88,35 @@ Impulse-response check (from `mouth_guitar_talkbox.py`):
 
 ---
 
+### Browser Path & Neural Codecs (`realm-quant`)
+
+While the Python implementation in this repository provides an offline, physically accurate 48-section Kelly-Lochbaum waveguide, we also maintain a real-time browser path via the [realm-quant](https://github.com/ljrseals-dev/realm-quant) project.
+
+**Trade-offs:**
+- **Neural Codecs (AURA-G / realm-quant):** Extremely fast, suitable for real-time Web Audio / WASM execution. They can infer complex vocal tract shapes but may lack the physical constraints of a true waveguide (resulting in occasional unnatural transients).
+- **Physical Model (This Repo):** Mathematically rigorous. The 48-section Kelly-Lochbaum tract guarantees physically valid wave propagation, perfect for offline rendering, analysis, and generating high-fidelity training data for neural codecs.
+
+The `mouth_model_ui.html` file in this repository provides a pure Web Audio API approximation (using cascaded formant filters) for immediate browser playback without requiring neural inference.
+
+---
+
 ## Files in this release
 
 ```
 HarmoniaTalkbox/
 ├── README.md
-├── harmonia_guitar.py          # string + MIDI
-├── midi_bridge.py              # YIN + orchestration
-├── mouth_tract.py              # 48-section Kelly-Lochbaum
-├── mouth_guitar_talkbox.py     # verification + demo
-├── test_midi_bridge.py         # unit tests
-├── mouth_model_ui.html         # browser UI (50 presets)
-└── mouth_guitar_demo.wav       # example render (optional)
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── pyproject.toml
+├── harmonia_guitar.py
+├── midi_bridge.py
+├── mouth_tract.py
+├── mouth_guitar_talkbox.py
+├── test_midi_bridge.py
+├── mouth_model_ui.html
+├── mouth_guitar_demo.wav
+└── examples/
+    └── aura_integration.py
 ```
 
 ---
@@ -105,10 +125,3 @@ HarmoniaTalkbox/
 
 Research / non-commercial use unless otherwise noted.  
 Kelly-Lochbaum implementation and area fitting are original work for the HarmoniaCodec / UNREAL AI Systems line.
-
----
-
-## Related
-
-- HarmoniaCodec scaffold (neural singing codec + guitar downstream mix)
-- realm-quant technical report (browser delivery measurements for DAC)
