@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2026-11-11
+### Changed
+- Replaced the cepstral peak-picking audio check (6 of 10 false failures) with a per-harmonic consistency test against the tract's impulse-response gain.
+### Added
+- `test_tract.py` (formants within 12%; rendered guitar follows the tract response within 1.5 dB).
+- README verification section and monophonic-transcriber note.
+
 ## [1.0.0] - 2026-11-11
 ### Added
 - **Core Physical Model:** 48-section Kelly-Lochbaum vocal tract with lip radiation and glottal reflection.

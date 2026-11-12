@@ -17,24 +17,34 @@ def render(notes, vowels, glide=0.08, step=0.5, tail=0.8):
     curve = signal.lfilter([1 - np.exp(-1 / (glide * FS))], [1, -np.exp(-1 / (glide * FS))], curve)   # glide between vowels
     y = M.Tract().process(src, curve); return y / np.max(np.abs(y)) * 0.7, src
 
-def log_envelope(x, fs=FS, fmax=3500):
-    N = len(x); S = np.abs(np.fft.rfft(x * np.hanning(N), 1 << 17)); f = np.fft.rfftfreq(1 << 17, 1 / fs)
-    c = np.fft.irfft(np.log(S + 1e-12)); lift = np.zeros_like(c); q = int(fs / 400); lift[:q] = 1; lift[-q:] = 1   # cepstral envelope
-    return f, np.fft.rfft(c * lift).real
+def tract_gain_db(vowel, n=1 << 14):
+    """Exact magnitude response of the tract (dB) from its impulse response; returns (freqs, dB)."""
+    imp = np.zeros(n); imp[0] = 1.0; h = M.Tract().process(imp, np.full(n, vowel), block=n)
+    return np.fft.rfftfreq(n, 1 / FS), 20 * np.log10(np.abs(np.fft.rfft(h)) + 1e-12)
 
-def tract_peaks(out, src, fs=FS, fmax=3500, k=2):
-    """Peaks of (output envelope - source envelope): the tract's own response, with the string's spectral tilt removed."""
-    f, eo = log_envelope(out, fs); _, es = log_envelope(src, fs); d = (eo - es); m = (f < fmax) & (f > 100)
-    pk, _ = signal.find_peaks(d[m], prominence=0.3); return [round(float(f[m][p])) for p in pk[:k]]
+def lti_consistency(midi, vowel, fmax=4000.0, floor_db=-45.0):
+    """For a held vowel the tract is a fixed filter, so every harmonic of the string must be scaled by the tract's gain at that
+    frequency. Returns the per-harmonic error (dB) between measured output/source and the impulse-response gain."""
+    y, src = render([midi], [vowel], glide=1e-3, step=0.4, tail=0.2); a, b = int(0.1 * FS), int(0.5 * FS)
+    w = np.hanning(b - a); Y = np.abs(np.fft.rfft(y[a:b] * w, 1 << 16)); S = np.abs(np.fft.rfft(src[a:b] * w, 1 << 16)); fr = np.fft.rfftfreq(1 << 16, 1 / FS)
+    f0 = 440 * 2 ** ((midi - 69) / 12); fh, gh = tract_gain_db(vowel); raw = Y / (np.max(np.abs(y)) / 0.7)   # undo the render's normalisation
+    err = []
+    for k in range(1, int(fmax / f0)):
+        i = int(np.argmin(np.abs(fr - k * f0))); j = slice(max(i - 3, 0), i + 4); s_k = S[j].max()
+        if 20 * np.log10(s_k / S.max() + 1e-12) < floor_db: continue
+        meas = 20 * np.log10(raw[j].max() / s_k); err.append(meas - np.interp(k * f0, fh, gh))
+    err = np.array(err); return err - np.median(err)          # remove the constant render gain; what is left is shape error
 
 if __name__ == "__main__":
     print("== tract resonances after fitting (impulse response) vs targets ==")
     for i, v in enumerate(M.ORDER): print(f"  {v}: {M.formants(i / 4)}   target F1,F2 {REF[v]}")
-    print("\n== guitar string through the tract: tract response (output/source) at A2 (110 Hz) and E3 (165 Hz) ==")
+    print("\n== rendered guitar vs the tract's own response: per-harmonic shape error (dB, constant gain removed) ==")
+    worst = 0.0
     for midi in (45, 52):
-      for i, v in enumerate(M.ORDER):
-        y, src = render([midi], [i / 4], glide=1e-3, step=0.4, tail=0.2); a, b = int(0.1 * FS), int(0.5 * FS); pk = tract_peaks(y[a:b], src[a:b])
-        ok = len(pk) >= 2 and all(abs(pk[j] / REF[v][j] - 1) < 0.25 for j in range(2)); print(f"  midi {midi} {v}: tract peaks {pk} vs {REF[v]}  {'OK' if ok else 'off by >25%'}")
+        for i, v in enumerate(M.ORDER):
+            e = lti_consistency(midi, i / 4); worst = max(worst, float(np.max(np.abs(e))))
+            print(f"  midi {midi} {v}: {len(e)} harmonics, median |err| {np.median(np.abs(e)):.2f} dB, max |err| {np.max(np.abs(e)):.2f} dB")
+    print(f"  worst harmonic error over all notes: {worst:.2f} dB  ({'OK' if worst < 1.5 else 'CHECK'})")
     notes = [40, 47, 52, 55, 59, 55, 52, 47]; vow = [0, .25, .5, .75, 1.0, .75, .5, 0]
     y, src = render(notes, vow); wavfile.write("mouth_guitar_demo.wav", FS, (y * 32767).astype(np.int16))
     print(f"\nwrote mouth_guitar_demo.wav ({len(y)/FS:.1f} s), peak {20*np.log10(np.max(np.abs(y))):.1f} dBFS; finite: {bool(np.all(np.isfinite(y)))}")

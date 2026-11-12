@@ -13,11 +13,11 @@ Clean modular architecture designed for AURA-G integration and browser / real-ti
 # Requirements: Python 3.9+, numpy, scipy
 pip install -e .
 
-# Run the physical verification + generate demo audio
+# Verify the tract (impulse response + per-harmonic consistency of the rendered guitar) and write the demo audio
 python mouth_guitar_talkbox.py
 
-# Run the 4-test suite
-python -m unittest -v test_midi_bridge
+# Run the tests
+python -m unittest -v test_midi_bridge test_tract
 ```
 
 Expected test output:
@@ -68,6 +68,16 @@ notes = transcribe(audio, sr)   # now uses AURA-G
 `Tract().process(src, vowel_curve)` is the stable articulation interface. Swapping the tract implementation requires no changes to the bridge or tests.
 
 ---
+
+## Verification
+
+- **Impulse response:** F1/F2 of each vowel against textbook male formants (table below).
+- **Rendered guitar:** for a held vowel the tract is a fixed filter, so each harmonic of the string must come out scaled by the tract's gain at that
+  frequency. `mouth_guitar_talkbox.py` measures the per-harmonic shape error (constant gain removed): median under 0.1 dB, worst 1.33 dB over 10 notes (A2, E3).
+  This replaces an earlier peak-picking check that reported false failures. It shows the audio carries the tract's resonances; it does not prove the
+  vowels are intelligible to a listener or an ASR model, and it does not cover glides between vowels.
+- **Transcription:** `transcribe()` is a lightweight *monophonic* YIN fallback (it missed 1 of 10 test notes). For chords or polyphonic audio use
+  `register_transcriber` with AURA-G or another polyphonic model. `examples/aura_integration.py` uses a mock, not AURA-G itself.
 
 ## Physical model notes
 
